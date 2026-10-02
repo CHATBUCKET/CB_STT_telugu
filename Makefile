@@ -1,0 +1,40 @@
+IMAGE   := s2t-telugu
+PORT    := 8000
+MODELS  := $(PWD)/models
+
+.PHONY: build run stop logs health test clean
+
+## Build the Docker image (multi-stage)
+build:
+	docker build -t $(IMAGE) .
+
+## Run the container (mounts ./models read-only)
+run:
+	docker run -d \
+		--name $(IMAGE) \
+		-p $(PORT):8000 \
+		-v $(MODELS):/models:ro \
+		$(IMAGE)
+	@echo "Started → http://localhost:$(PORT)"
+
+## Stop and remove the container
+stop:
+	docker stop $(IMAGE) && docker rm $(IMAGE)
+
+## Follow container logs
+logs:
+	docker logs -f $(IMAGE)
+
+## Check health endpoint
+health:
+	curl -sf http://localhost:$(PORT)/health | python3 -m json.tool
+
+## Quick smoke-test: build → run → health → stop
+test: build run
+	@sleep 5
+	$(MAKE) health
+	$(MAKE) stop
+
+## Remove the image
+clean:
+	docker rmi $(IMAGE) 2>/dev/null || true
