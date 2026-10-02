@@ -85,7 +85,6 @@ curl http://localhost:8000/metrics  # Prometheus
 |---|---|---|
 | `S2T_LANGUAGE` | `telugu` | model folder name |
 | `S2T_MODEL_DIR` | `models` (`/models` in Docker) | local model root |
-| `S2T_MODEL_GCS_URI` | – | `gs://bucket/prefix` — download model from GCS at startup |
 | `S2T_DECODE_WORKERS` | `2` | set to container vCPU count |
 | `S2T_MAX_STREAMS` | `40` | max concurrent live streams |
 | `S2T_MAX_OFFLINE` | `8` | max concurrent offline files |
