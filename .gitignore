@@ -1,8 +1,4 @@
 # Model files — large binaries, not committed to git
-models/*/encoder.onnx
-models/*/decoder.onnx
-models/*/joiner.onnx
-models/*/tokens.txt
 
 # Python
 __pycache__/
