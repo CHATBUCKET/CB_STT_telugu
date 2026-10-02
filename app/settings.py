@@ -15,8 +15,6 @@ class Settings:
     # Model
     language: str = _env("LANGUAGE", "telugu")
     model_dir: Path = _env("MODEL_DIR", "models", Path)
-    # gs://bucket/prefix — models are read from gs://bucket/prefix/<language>/
-    model_gcs_uri: str = _env("MODEL_GCS_URI", "")
 
     # Inference
     provider: str = _env("PROVIDER", "cpu")                  # cpu | cuda
