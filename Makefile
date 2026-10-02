@@ -38,3 +38,7 @@ test: build run
 ## Remove the image
 clean:
 	docker rmi $(IMAGE) 2>/dev/null || true
+
+## Run smoke test locally (no Docker needed)
+test-local:
+	python3 tests/test_service.py
