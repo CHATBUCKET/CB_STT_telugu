@@ -28,12 +28,12 @@ USER s2t
 
 ENV S2T_LANGUAGE=telugu \
     S2T_MODEL_DIR=/models \
-    S2T_PORT=8000
+    S2T_PORT=6008
 
-EXPOSE 8000
+EXPOSE 6008
 
 # Health check hits GET /health (liveness + readiness)
 HEALTHCHECK --interval=15s --timeout=3s --start-period=60s \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6008/health', timeout=2)"
 
 CMD ["python", "-m", "app"]

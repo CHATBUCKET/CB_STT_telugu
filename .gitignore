@@ -16,3 +16,4 @@ build/
 # Misc
 .env
 !tests/sample.wav
+tests/result.json

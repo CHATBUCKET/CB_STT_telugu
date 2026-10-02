@@ -1,5 +1,5 @@
 IMAGE   := s2t-telugu
-PORT    := 8000
+PORT    := 6008
 MODELS  := $(PWD)/models
 
 .PHONY: build run stop logs health test clean
