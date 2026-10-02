@@ -13,8 +13,8 @@ docker build -t s2t-telugu .
 
 # Run — mount model files at runtime
 docker run -d \
-  -p 8000:8000 \
-  -v $PWD/models:/models:ro \
+  -p 6008:8000 \
+  -v "$PWD/models":/models:ro \
   --name s2t-telugu \
   s2t-telugu
 ```
@@ -57,7 +57,7 @@ Send 16-bit little-endian mono PCM frames (~100 ms each). Send text frame `eof` 
 ### Offline batch — `POST /v1/transcribe`
 
 ```bash
-curl -F files=@audio.wav http://localhost:8000/v1/transcribe
+curl -F files=@audio.wav http://localhost:6008/v1/transcribe
 ```
 
 ```json
@@ -75,8 +75,8 @@ Accepts WAV, FLAC, OGG, MP3 at any sample rate (mono or stereo).
 ### Ops
 
 ```bash
-curl http://localhost:8000/health    # liveness + readiness
-curl http://localhost:8000/metrics  # Prometheus
+curl http://localhost:6008/health    # liveness + readiness
+curl http://localhost:6008/metrics  # Prometheus
 ```
 
 ## Configuration
