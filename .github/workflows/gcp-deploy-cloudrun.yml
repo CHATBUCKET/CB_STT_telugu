@@ -1,0 +1,63 @@
+name: GCP Deploy (Cloud Run)
+
+# Rolls an image pushed by "GCP Build & Push" out to this language's Cloud Run
+# service. Only the image changes - scaling, env, probes, load balancer and
+# Cloud Armor are Terraform (gke-infra-terraform, modules/stt-cloudrun).
+# Cloud Run moves traffic only once the new revision passes its startup probe,
+# so a broken image fails this job and the old revision keeps serving. If the
+# public health check then fails, traffic goes back to the previous revision.
+#
+# Repo Settings -> Secrets and variables -> Actions:
+#   secrets: GCP_WIF_PROVIDER, GCP_DEPLOY_SA
+#   vars:    GCP_PROJECT_ID, GCP_REGION, GAR_REPOSITORY, IMAGE_NAME,
+#            CLOUD_RUN_SERVICE, STT_HEALTH_URL, STT_ALLOWED_ORIGIN
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (from the GCP Build & Push summary, e.g. 24d9322)"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write   # keyless GCP login (Workload Identity Federation)
+
+concurrency: deploy-cloudrun
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      REGION: ${{ vars.GCP_REGION }}
+      TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Log in to GCP
+        run: |
+          [[ "$TAG" =~ ^[A-Za-z0-9._-]{1,128}$ ]] || { echo "::error::invalid image tag"; exit 1; }
+          curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://iam.googleapis.com/${{ secrets.GCP_WIF_PROVIDER }}" \
+            | jq -r .value > "$RUNNER_TEMP/oidc.jwt"
+          gcloud iam workload-identity-pools create-cred-config "${{ secrets.GCP_WIF_PROVIDER }}" \
+            --service-account="${{ secrets.GCP_DEPLOY_SA }}" \
+            --credential-source-file="$RUNNER_TEMP/oidc.jwt" --output-file="$RUNNER_TEMP/gcp.json"
+          gcloud auth login --cred-file="$RUNNER_TEMP/gcp.json" --quiet
+          gcloud config set project "${{ vars.GCP_PROJECT_ID }}"
+
+      - name: Deploy
+        run: |
+          IMAGE="$REGION-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/${{ vars.IMAGE_NAME }}:$TAG"
+          PREV=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')
+          echo "Current revision: $PREV"
+          gcloud run services update "$SERVICE" --region "$REGION" --image "$IMAGE" --quiet
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --quiet
+
+          [ -n "${{ vars.STT_HEALTH_URL }}" ] || exit 0   # no public URL configured yet
+          for i in $(seq 12); do
+            curl -sf -H "Origin: ${{ vars.STT_ALLOWED_ORIGIN }}" "${{ vars.STT_HEALTH_URL }}" && exit 0
+            sleep 5
+          done
+          echo "::error::health check failed - rolling back to $PREV"
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "$PREV=100" --quiet
+          exit 1

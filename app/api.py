@@ -10,11 +10,13 @@ import asyncio
 import io
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 
 import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
 from .engine import REJECTED, Engine, Session
@@ -36,8 +38,31 @@ async def lifespan(app: FastAPI):
     app.state.engine.shutdown()
 
 
-app = FastAPI(title="Speech-to-Text", version="1.0.0", lifespan=lifespan)
+# No interactive docs or OpenAPI schema: the API is documented in README.md and
+# there is no reason to advertise its surface to the internet.
+app = FastAPI(title="Speech-to-Text", version="1.0.0", lifespan=lifespan,
+              docs_url=None, redoc_url=None, openapi_url=None)
+# Prometheus scrape endpoint. Not reachable through the public load balancer
+# (its Cloud Armor policy only admits /v1/stream, /v1/transcribe and /health).
 app.mount("/metrics", make_asgi_app())
+
+_allowed_origin = re.compile(settings.cors_origin_regex) if settings.cors_origin_regex else None
+if _allowed_origin:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=settings.cors_origin_regex,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+        max_age=600,
+    )
+
+
+def _origin_allowed(ws: WebSocket) -> bool:
+    """Browsers always send Origin on a WebSocket handshake and CORS does not
+    apply to WebSockets, so a cross-site page could otherwise open a stream.
+    Non-browser clients (no Origin header) are allowed."""
+    origin = ws.headers.get("origin")
+    return _allowed_origin is None or origin is None or bool(_allowed_origin.fullmatch(origin))
 
 
 def _emitter(queue: asyncio.Queue):
@@ -69,6 +94,9 @@ async def health():
 
 @app.websocket("/v1/stream")
 async def stream(ws: WebSocket, sample_rate: int = Query(16000, ge=8000, le=48000)):
+    if not _origin_allowed(ws):
+        await ws.close(code=1008)  # policy violation; rejects the handshake with 403
+        return
     await ws.accept()
     engine: Engine = app.state.engine
     events: asyncio.Queue = asyncio.Queue()
