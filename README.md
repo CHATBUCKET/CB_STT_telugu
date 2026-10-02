@@ -112,7 +112,8 @@ the allowed origins.
 
 1. **GCP Build & Push** builds, smoke-tests (read-only, no capabilities,
    transcribes `tests/sample.wav`) and Trivy-scans the image on every push and
-   pull request, and pushes it to Artifact Registry as `<short sha>` on `main`.
+   pull request, and pushes it to Artifact Registry as `<short sha>` from `main`
+   (`develop-<short sha>` from `develop`).
 2. **GCP Deploy (Cloud Run)** (manual, `production` environment) rolls that tag
    out; traffic moves only once the new revision passes its startup probe, and
    goes back to the previous revision if the public health check fails.
