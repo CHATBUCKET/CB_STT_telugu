@@ -1,0 +1,8 @@
+sherpa-onnx==1.13.8
+numpy==2.5.3
+soundfile==0.14.0
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-multipart==0.0.32
+prometheus-client==0.26.0
+google-cloud-storage==3.14.1
