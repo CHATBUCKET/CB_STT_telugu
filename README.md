@@ -128,13 +128,16 @@ Cloud Armor WAF, Google-managed certificate). The infrastructure is Terraform in
 `/stt-telugu/v1/transcribe` and `/stt-telugu/health` are reachable, and only with a
 user token (see Authentication).
 
-1. **GCP Build & Push** builds, smoke-tests (read-only, no capabilities,
-   transcribes `tests/sample.wav`) and Trivy-scans the image on every push and
-   pull request, and pushes it to Artifact Registry as `<short sha>` from `main`
-   (`develop-<short sha>` from `develop`).
-2. **GCP Deploy (Cloud Run)** (manual, `production` environment) rolls that tag
-   out; traffic moves only once the new revision passes its startup probe, and
-   goes back to the previous revision if the public health check fails.
+**GCP Build, Push & Deploy** (one workflow, `develop` only - nothing is
+deployed from `main`):
+
+- every push and pull request: build, smoke test (read-only container,
+  transcribes `tests/sample.wav`), SBOM with Syft (kept as a run artifact) and
+  a Grype scan of it (fails on fixable CRITICAL vulnerabilities);
+- push to `develop`: push the image as `develop-<short sha>`, then deploy it
+  (`production` environment). Traffic moves only once the new revision passes
+  its startup probe, and goes back to the previous revision if the public
+  health check fails.
 
 ```
 wss://stt-agent.chatbucket.chat/stt-telugu/v1/stream?sample_rate=16000&token=$TOKEN
