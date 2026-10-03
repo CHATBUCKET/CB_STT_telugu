@@ -7,16 +7,21 @@
 """
 
 import asyncio
+import base64
+import hashlib
+import hmac
 import io
 import json
 import logging
 import re
+import time
 from contextlib import asynccontextmanager
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
 from .engine import REJECTED, Engine, Session
@@ -46,6 +51,19 @@ app = FastAPI(title="Speech-to-Text", version="1.0.0", lifespan=lifespan,
 # (its Cloud Armor policy only admits /v1/stream, /v1/transcribe and /health).
 app.mount("/metrics", make_asgi_app())
 
+
+# Checked before the upload body is read, so an unauthenticated client can't
+# make the server receive a 30 MB file. Registered before CORS, so CORS stays
+# the outer layer and browsers can read the 401.
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    if request.url.path == "/v1/transcribe" and request.method == "POST":
+        if not _token_valid(request.headers.get("authorization", "").removeprefix("Bearer ")):
+            return JSONResponse({"detail": "missing or invalid token"}, status_code=401,
+                                headers={"WWW-Authenticate": "Bearer"})
+    return await call_next(request)
+
+
 _allowed_origin = re.compile(settings.cors_origin_regex) if settings.cors_origin_regex else None
 if _allowed_origin:
     app.add_middleware(
@@ -63,6 +81,29 @@ def _origin_allowed(ws: WebSocket) -> bool:
     Non-browser clients (no Origin header) are allowed."""
     origin = ws.headers.get("origin")
     return _allowed_origin is None or origin is None or bool(_allowed_origin.fullmatch(origin))
+
+
+def _b64decode(part: str) -> bytes:
+    return base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
+
+
+def _token_valid(token: str | None) -> bool:
+    """User token issued by cb-backend-nest: an HS256 JWT signed with
+    S2T_TOKEN_KEY, with aud "stt" and an exp in the future (issued for a few
+    minutes). Always valid when no key is configured (local use)."""
+    if not settings.token_key:
+        return True
+    try:
+        header, payload, signature = token.split(".")
+        expected = hmac.new(settings.token_key.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
+        if not hmac.compare_digest(_b64decode(signature), expected):
+            return False
+        if json.loads(_b64decode(header)).get("alg") != "HS256":
+            return False
+        claims = json.loads(_b64decode(payload))
+        return claims.get("aud") == "stt" and float(claims["exp"]) > time.time()
+    except Exception:  # missing, malformed or wrongly typed token
+        return False
 
 
 def _emitter(queue: asyncio.Queue):
@@ -92,9 +133,11 @@ async def health():
 #                   | {"type":"final","text","start","end"} | {"type":"done","text","segments"}
 #                   | {"type":"error","error"}
 
+# Browsers can't set headers on a WebSocket, so the token is a query parameter.
 @app.websocket("/v1/stream")
-async def stream(ws: WebSocket, sample_rate: int = Query(16000, ge=8000, le=48000)):
-    if not _origin_allowed(ws):
+async def stream(ws: WebSocket, sample_rate: int = Query(16000, ge=8000, le=48000),
+                 token: str | None = Query(None)):
+    if not _origin_allowed(ws) or not _token_valid(token):
         await ws.close(code=1008)  # policy violation; rejects the handshake with 403
         return
     await ws.accept()

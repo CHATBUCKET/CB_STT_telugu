@@ -39,9 +39,13 @@ class Settings:
 
     # Browser origins allowed to call the API (CORS for HTTP, Origin check for
     # WebSocket handshakes), as one full-match regex, e.g.
-    # https://(todozee\.chatbucket\.chat|([a-z0-9-]+\.)*chatbucket\.business)
+    # ^https://todozee[.]chatbucket[.]chat$|^https://[a-z0-9.-]+[.]chatbucket[.]business$
     # Empty = no CORS headers and no WebSocket Origin check (local use).
     cors_origin_regex: str = _env("CORS_ORIGIN_REGEX", "")
+
+    # HMAC key of the user tokens (HS256 JWT, aud "stt") that cb-backend-nest
+    # issues. Set = every API call needs a valid token. Empty = no auth (local use).
+    token_key: str = _env("TOKEN_KEY", "")
 
     # Server
     host: str = _env("HOST", "0.0.0.0")

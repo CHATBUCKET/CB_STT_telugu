@@ -97,8 +97,26 @@ curl http://localhost:6008/metrics  # Prometheus
 | `S2T_PORT` | `8000` (`6008` in Docker) | listen port (Cloud Run sets `8080`) |
 | `S2T_MAX_UPLOAD_MB` | `100` | per file; Cloud Run caps a whole request at 32 MB, so production uses `30` |
 | `S2T_CORS_ORIGIN_REGEX` | empty | browser origins allowed (CORS + WebSocket `Origin` check), full-match regex; empty disables both |
+| `S2T_TOKEN_KEY` | empty | HMAC key of the user tokens; set = every API call needs a token (production: Secret Manager `prod-stt-token-key`) |
 
 `/docs`, `/redoc` and `/openapi.json` are disabled.
+
+## Authentication
+
+When `S2T_TOKEN_KEY` is set, `/v1/transcribe` and `/v1/stream` require a user
+token; `/health` stays open. The token is an HS256 JWT that **cb-backend-nest**
+issues to a logged-in user, signed with the same key:
+
+```json
+{"alg": "HS256", "typ": "JWT"}
+{"sub": "<user id>", "aud": "stt", "exp": <now + 300>}
+```
+
+- Upload: `Authorization: Bearer <token>` (otherwise `401`).
+- WebSocket: `wss://…/stt-telugu/v1/stream?token=<token>` (browsers can't set
+  headers on a WebSocket; otherwise the handshake gets `403`).
+
+Keep tokens short-lived (5 minutes): the WebSocket token ends up in URLs.
 
 ## Deployment
 
@@ -107,8 +125,8 @@ Production runs on Cloud Run as `stt-telugu`, behind
 Cloud Armor WAF, Google-managed certificate). The infrastructure is Terraform in
 [gke-infra-terraform](https://github.com/nandak99-coin/gke-infra-terraform)
 (`modules/stt-cloudrun`, `envs/prod/stt.tf`); only `/stt-telugu/v1/stream`,
-`/stt-telugu/v1/transcribe` and `/stt-telugu/health` are reachable, and only from
-the allowed origins.
+`/stt-telugu/v1/transcribe` and `/stt-telugu/health` are reachable, and only with a
+user token (see Authentication).
 
 1. **GCP Build & Push** builds, smoke-tests (read-only, no capabilities,
    transcribes `tests/sample.wav`) and Trivy-scans the image on every push and
@@ -119,8 +137,8 @@ the allowed origins.
    goes back to the previous revision if the public health check fails.
 
 ```
-wss://stt-agent.chatbucket.chat/stt-telugu/v1/stream?sample_rate=16000
-curl -H 'Origin: https://todozee.chatbucket.chat' -F files=@audio.wav https://stt-agent.chatbucket.chat/stt-telugu/v1/transcribe
+wss://stt-agent.chatbucket.chat/stt-telugu/v1/stream?sample_rate=16000&token=$TOKEN
+curl -H "Authorization: Bearer $TOKEN" -F files=@audio.wav https://stt-agent.chatbucket.chat/stt-telugu/v1/transcribe
 ```
 
 ## Health check
