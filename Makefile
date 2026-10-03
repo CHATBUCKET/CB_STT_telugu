@@ -1,6 +1,5 @@
 IMAGE   := s2t-telugu
 PORT    := 6008
-MODELS  := $(PWD)/models
 
 .PHONY: build run stop logs health test clean
 
@@ -8,12 +7,12 @@ MODELS  := $(PWD)/models
 build:
 	docker build -t $(IMAGE) .
 
-## Run the container (mounts ./models read-only)
+## Run the container the way Cloud Run does (model is baked into the image)
 run:
 	docker run -d \
 		--name $(IMAGE) \
-		-p $(PORT):8000 \
-		-v $(MODELS):/models:ro \
+		--read-only --cap-drop=ALL --security-opt no-new-privileges \
+		-p $(PORT):$(PORT) \
 		$(IMAGE)
 	@echo "Started → http://localhost:$(PORT)"
 

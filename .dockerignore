@@ -3,8 +3,8 @@
 .gitignore
 .github
 
-# ── Model binaries — mount at runtime via -v $PWD/models:/models:ro ──────────
-models/
+# Model binaries under models/ are NOT ignored: the Dockerfile bakes
+# models/<language>/ into the image.
 
 # ── Secrets / local config ───────────────────────────────────────────────────
 .env

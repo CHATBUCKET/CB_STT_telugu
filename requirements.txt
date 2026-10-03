@@ -2,6 +2,12 @@ sherpa-onnx==1.13.8
 numpy==2.5.3
 soundfile==0.14.0
 fastapi==0.141.1
-uvicorn[standard]==0.53.0
+# uvicorn with only the extras the service uses (event loop, HTTP parser,
+# WebSocket protocol) - not [standard], which also pulls in watchfiles
+# (auto-reload), python-dotenv and PyYAML.
+uvicorn==0.53.0
+uvloop==0.23.0
+httptools==0.8.0
+websockets==17.1
 python-multipart==0.0.32
 prometheus-client==0.26.0
